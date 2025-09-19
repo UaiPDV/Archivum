@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestão de Arquivos por Nome, Data e Segmento</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+        .card {
+            background-color: white;
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            transition: all 0.3s ease-in-out;
+        }
+        .card:hover {
+             box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+        }
+        .btn-primary {
+            background-color: #4f46e5;
+            color: white;
+        }
+        .btn-primary:hover {
+            background-color: #4338ca;
+        }
+        .table-container::-webkit-scrollbar { width: 8px; height: 8px; }
+        .table-container::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 10px; }
+        .table-container::-webkit-scrollbar-thumb { background: #a5b4fc; border-radius: 10px; }
+        .table-container::-webkit-scrollbar-thumb:hover { background: #818cf8; }
+        .fade-in { animation: fadeIn 0.5s ease-in-out; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .message-box {
+            position: fixed; top: 20px; right: 20px; z-index: 1050; padding: 1rem 1.5rem; border-radius: 0.5rem; color: white;
+            opacity: 0; transform: translateY(-20px); transition: opacity 0.3s, transform 0.3s; pointer-events: none;
+        }
+        .message-box.show { opacity: 1; transform: translateY(0); }
+        .message-box.success { background-color: #22c55e; }
+        .message-box.error { background-color: #ef4444; }
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background-color: rgba(0,0,0,0.5);
+            display: flex; align-items: center; justify-content: center;
+            z-index: 1040; opacity: 0; pointer-events: none; transition: opacity 0.3s ease-in-out;
+        }
+        .modal-overlay.show { opacity: 1; pointer-events: auto; }
+        .modal-content {
+            background: white; padding: 2rem; border-radius: 0.5rem;
+            transform: scale(0.95); transition: transform 0.3s ease-in-out;
+        }
+        .modal-overlay.show .modal-content { transform: scale(1); }
+    </style>
+</head>
+<body>
+    <div id="message-box" class="message-box"></div>
+    
+    <!-- Modal de Confirmação de Exclusão -->
+    <div id="delete-modal" class="modal-overlay">
+        <div class="modal-content text-center max-w-sm">
+            <h3 class="text-lg font-medium text-gray-900">Confirmar Exclusão</h3>
+            <p class="mt-2 text-sm text-gray-500">Você tem certeza que deseja excluir este arquivo? Esta ação não pode ser desfeita.</p>
+            <div class="mt-6 flex justify-center gap-4">
+                <button id="cancel-delete-btn" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">Cancelar</button>
+                <button id="confirm-delete-btn" class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700">Excluir</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="container mx-auto p-4 md:p-8 max-w-7xl">
+        <header class="text-center mb-10">
+            <h1 class="text-4xl font-bold text-gray-800">📁 Gestão de Arquivos</h1>
+            <p class="text-lg text-gray-600 mt-2">Armazene, classifique e acesse seus arquivos digitais com agilidade.</p>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div class="lg:col-span-1 flex flex-col gap-8">
+                <!-- Coluna de Adicionar Arquivo -->
+                <div class="card p-6 h-fit fade-in">
+                    <h2 class="text-2xl font-semibold text-gray-700 mb-6 border-b pb-3"><i class="fas fa-plus-circle mr-2 text-indigo-500"></i>Adicionar Novo Arquivo</h2>
+                    <form id="add-file-form" class="space-y-4">
+                        <div>
+                            <label for="fileName" class="block text-sm font-medium text-gray-700">Nome do Arquivo</label>
+                            <input type="text" id="fileName" placeholder="Contrato_Fornecedor_Energia" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" required>
+                            <p id="fileNameError" class="text-xs text-red-500 mt-1 hidden"></p>
+                        </div>
+                        <div>
+                            <label for="fileDate" class="block text-sm font-medium text-gray-700">Data de Criação/Validade</label>
+                            <input type="date" id="fileDate" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" required>
+                            <p id="fileDateError" class="text-xs text-red-500 mt-1 hidden"></p>
+                        </div>
+                        <div>
+                            <label for="fileSegment" class="block text-sm font-medium text-gray-700">Segmento</label>
+                            <select id="fileSegment" class="mt-1 block w-full pl-3 pr-10 py-2 border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 rounded-md" required>
+                                <option value="">Selecione um segmento</option>
+                                <option>Hortifruti</option><option>Pastelaria</option><option>Restaurante</option>
+                                <option>Jurídico</option><option>RH</option><option>Financeiro</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="fileInput" class="block text-sm font-medium text-gray-700">Anexar Arquivo</label>
+                            <input type="file" id="fileInput" class="mt-1 block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" required>
+                        </div>
+                        <button type="submit" class="w-full btn-primary font-bold py-2 px-4 rounded-md shadow-sm transition-transform transform hover:scale-105">
+                            <i class="fas fa-save mr-2"></i>Salvar Arquivo
+                        </button>
+                    </form>
+                </div>
+                <!-- Coluna de Indicadores -->
+                <div class="card p-6 h-fit fade-in" style="animation-delay: 0.1s;">
+                     <h2 class="text-2xl font-semibold text-gray-700 mb-6 border-b pb-3"><i class="fas fa-chart-pie mr-2 text-indigo-500"></i>Indicadores</h2>
+                     <div id="kpi-container" class="space-y-4">
+                         <!-- KPIs serão inseridos aqui -->
+                     </div>
+                </div>
+            </div>
+
+            <!-- Coluna de Pesquisa e Listagem -->
+            <div class="lg:col-span-2 card p-6 fade-in" style="animation-delay: 0.2s;">
+                 <h2 class="text-2xl font-semibold text-gray-700 mb-6 border-b pb-3"><i class="fas fa-search mr-2 text-indigo-500"></i>Pesquisa Inteligente</h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <input type="text" id="searchInput" placeholder="Buscar por palavra-chave..." class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                    <input type="date" id="startDate" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" title="Data inicial">
+                    <input type="date" id="endDate" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" title="Data final">
+                    <select id="segmentFilter" class="w-full md:col-span-3 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                        <option value="">Todos os Segmentos</option>
+                        <option>Hortifruti</option><option>Pastelaria</option><option>Restaurante</option>
+                        <option>Jurídico</option><option>RH</option><option>Financeiro</option>
+                    </select>
+                </div>
+                <div class="table-container overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nome do Arquivo</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Data</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Segmento</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="file-list" class="bg-white divide-y divide-gray-200"></tbody>
+                    </table>
+                </div>
+                 <p id="no-results" class="text-center text-gray-500 py-8 hidden">Nenhum arquivo encontrado.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- ELEMENTOS DO DOM ---
+            const form = document.getElementById('add-file-form');
+            const fileList = document.getElementById('file-list');
+            const noResults = document.getElementById('no-results');
+            const fileNameInput = document.getElementById('fileName');
+            const fileDateInput = document.getElementById('fileDate');
+            const fileNameError = document.getElementById('fileNameError');
+            const fileDateError = document.getElementById('fileDateError');
+            const searchInput = document.getElementById('searchInput');
+            const startDateInput = document.getElementById('startDate');
+            const endDateInput = document.getElementById('endDate');
+            const segmentFilter = document.getElementById('segmentFilter');
+            const kpiContainer = document.getElementById('kpi-container');
+            const deleteModal = document.getElementById('delete-modal');
+            const confirmDeleteBtn = document.getElementById('confirm-delete-btn');
+            const cancelDeleteBtn = document.getElementById('cancel-delete-btn');
+
+            let fileToDeleteId = null;
+
+            // --- BANCO DE DADOS LOCAL (Simulação) ---
+            let files = [
+                { id: 1, name: 'Contrato_Fornecedor_Energia', date: '2025-09-19', segment: 'Jurídico', fileObject: null },
+                { id: 2, name: 'Nota_Fiscal_Compra_Tomates', date: '2025-09-18', segment: 'Hortifruti', fileObject: null },
+                { id: 3, name: 'Contratacao_Novo_Funcionario', date: '2025-08-10', segment: 'RH', fileObject: null },
+                { id: 4, name: 'Relatorio_Vendas_Mensal', date: '2025-09-01', segment: 'Financeiro', fileObject: null },
+                { id: 5, name: 'Cardapio_Especial_Fim_Ano', date: '2025-08-25', segment: 'Restaurante', fileObject: null },
+                { id: 6, name: 'documento1', date: '2025-01-01', segment: 'Financeiro', fileObject: null }, // Exemplo não-conforme
+            ];
+            
+            // --- MAPEAMENTO DE PALAVRAS-CHAVE PARA CLASSIFICAÇÃO AUTOMÁTICA ---
+            const segmentKeywords = {
+                'Jurídico': ['contrato', 'juridico', 'legal', 'advogado', 'termo'],
+                'RH': ['rh', 'humano', 'funcionario', 'contratacao', 'demissao', 'ferias'],
+                'Financeiro': ['fiscal', 'financeiro', 'pagamento', 'relatorio', 'vendas', 'nota', 'fatura'],
+                'Hortifruti': ['hortifruti', 'tomate', 'fruta', 'verdura', 'compra'],
+                'Restaurante': ['cardapio', 'restaurante', 'menu', 'prato'],
+                'Pastelaria': ['pastel', 'pastelaria', 'insumos']
+            };
+
+            // --- FUNÇÕES DE VALIDAÇÃO ---
+            function validateFileName(name) {
+                const genericNames = ['documento1', 'arquivo_final', 'documento_novo'];
+                if (name.split('_').filter(part => part.trim().length > 0).length < 3) {
+                    fileNameError.textContent = 'O nome deve conter no mínimo 3 palavras separadas por "_".';
+                    fileNameError.classList.remove('hidden'); return false;
+                }
+                if (genericNames.some(gn => name.toLowerCase().startsWith(gn))) {
+                    fileNameError.textContent = 'Não são permitidos nomes genéricos.';
+                    fileNameError.classList.remove('hidden'); return false;
+                }
+                fileNameError.classList.add('hidden'); return true;
+            }
+
+            function validateFileDate(dateString) {
+                if (!dateString) {
+                    fileDateError.textContent = 'A data é obrigatória.';
+                    fileDateError.classList.remove('hidden'); return false;
+                }
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const selectedDate = new Date(dateString + 'T00:00:00');
+                if (selectedDate > today) {
+                    fileDateError.textContent = 'Não são permitidas datas futuras.';
+                    fileDateError.classList.remove('hidden'); return false;
+                }
+                fileDateError.classList.add('hidden'); return true;
+            }
+
+            // --- FUNÇÕES PRINCIPAIS ---
+            function renderFiles(fileArray = files) {
+                fileList.innerHTML = '';
+                noResults.classList.toggle('hidden', fileArray.length > 0);
+                fileArray.forEach(file => {
+                    const row = document.createElement('tr');
+                    row.className = 'fade-in';
+                    row.innerHTML = `
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${file.name}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${new Date(file.date + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
+                        <td class="px-6 py-4 whitespace-nowrap"><span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getSegmentClass(file.segment)}">${file.segment}</span></td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <a href="#" class="view-btn text-indigo-600 hover:text-indigo-900" title="Visualizar" data-id="${file.id}"><i class="fas fa-eye"></i></a>
+                            <a href="#" class="delete-btn text-red-600 hover:text-red-900 ml-4" title="Excluir" data-id="${file.id}"><i class="fas fa-trash"></i></a>
+                        </td>`;
+                    fileList.appendChild(row);
+                });
+            }
+
+            function filterAndRender() {
+                const searchTerm = searchInput.value.toLowerCase();
+                const startDate = startDateInput.value;
+                const endDate = endDateInput.value;
+                const segment = segmentFilter.value;
+                const filteredFiles = files.filter(file => {
+                    const fileDate = new Date(file.date);
+                    const matchesSearch = file.name.toLowerCase().includes(searchTerm) || file.segment.toLowerCase().includes(searchTerm);
+                    const matchesSegment = !segment || file.segment === segment;
+                    const matchesStartDate = !startDate || fileDate >= new Date(startDate);
+                    const matchesEndDate = !endDate || fileDate <= new Date(endDate);
+                    return matchesSearch && matchesSegment && matchesStartDate && matchesEndDate;
+                });
+                renderFiles(filteredFiles);
+            }
+
+            // --- LÓGICA DO MODAL DE EXCLUSÃO ---
+            function showDeleteModal(id) {
+                fileToDeleteId = id;
+                deleteModal.classList.add('show');
+            }
+            function hideDeleteModal() {
+                fileToDeleteId = null;
+                deleteModal.classList.remove('show');
+            }
+            confirmDeleteBtn.addEventListener('click', () => {
+                if (fileToDeleteId) {
+                    files = files.filter(file => file.id !== fileToDeleteId);
+                    filterAndRender();
+                    updateStatistics();
+                    showMessage('Arquivo excluído com sucesso.', 'success');
+                }
+                hideDeleteModal();
+            });
+            cancelDeleteBtn.addEventListener('click', hideDeleteModal);
+
+            // --- FUNÇÕES DE KPI ---
+            function updateStatistics() {
+                const totalFiles = files.length;
+                if (totalFiles === 0) {
+                    kpiContainer.innerHTML = `<p class="text-sm text-gray-500">Nenhum dado para exibir.</p>`;
+                    return;
+                }
+                // 1. Volume por Segmento
+                const segmentCounts = files.reduce((acc, file) => {
+                    acc[file.segment] = (acc[file.segment] || 0) + 1;
+                    return acc;
+                }, {});
+                let segmentHTML = '<h4 class="font-semibold text-gray-800">Volume por Segmento</h4><ul class="text-sm list-disc pl-5 space-y-1">';
+                Object.entries(segmentCounts).sort(([,a],[,b]) => b-a).forEach(([segment, count]) => {
+                    segmentHTML += `<li>${segment}: <strong>${count}</strong></li>`;
+                });
+                segmentHTML += '</ul>';
+
+                // 2. Taxa de Conformidade de Nomenclatura
+                const compliantCount = files.filter(file => validateFileName(file.name)).length;
+                const complianceRate = ((compliantCount / totalFiles) * 100).toFixed(1);
+                const complianceColor = complianceRate >= 90 ? 'text-green-600' : 'text-amber-600';
+                let complianceHTML = `
+                    <h4 class="font-semibold text-gray-800 mt-4">Taxa de Conformidade</h4>
+                    <div class="flex items-center gap-2">
+                         <div class="w-full bg-gray-200 rounded-full h-2.5">
+                            <div class="bg-indigo-600 h-2.5 rounded-full" style="width: ${complianceRate}%"></div>
+                        </div>
+                        <span class="font-bold ${complianceColor}">${complianceRate}%</span>
+                    </div>`;
+                kpiContainer.innerHTML = segmentHTML + complianceHTML;
+            }
+
+            // --- EVENT LISTENERS ---
+            fileNameInput.addEventListener('input', () => {
+                const name = fileNameInput.value;
+                validateFileName(name);
+                // Sugestão de segmento
+                const lowerCaseName = name.toLowerCase();
+                for (const segment in segmentKeywords) {
+                    if (segmentKeywords[segment].some(keyword => lowerCaseName.includes(keyword))) {
+                        document.getElementById('fileSegment').value = segment;
+                        break;
+                    }
+                }
+            });
+            fileDateInput.addEventListener('change', () => validateFileDate(fileDateInput.value));
+
+            form.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const name = fileNameInput.value;
+                const date = fileDateInput.value;
+                const segment = document.getElementById('fileSegment').value;
+                const fileObject = document.getElementById('fileInput').files[0];
+
+                if (validateFileName(name) && validateFileDate(date) && segment && fileObject) {
+                    const newFile = { id: Date.now(), name, date, segment, fileObject };
+                    files.unshift(newFile);
+                    filterAndRender();
+                    updateStatistics();
+                    form.reset();
+                    fileNameError.classList.add('hidden');
+                    fileDateError.classList.add('hidden');
+                    showMessage('Arquivo adicionado com sucesso!', 'success');
+                } else {
+                     showMessage('Por favor, corrija os erros ou preencha todos os campos.', 'error');
+                }
+            });
+
+            fileList.addEventListener('click', (e) => {
+                const target = e.target.closest('a');
+                if (!target) return;
+                const id = parseInt(target.dataset.id);
+                if (target.classList.contains('delete-btn')) {
+                    showDeleteModal(id);
+                }
+                if (target.classList.contains('view-btn')) {
+                    const fileToView = files.find(f => f.id === id);
+                    if (fileToView && fileToView.fileObject) {
+                        window.open(URL.createObjectURL(fileToView.fileObject), '_blank');
+                    } else {
+                        showMessage('Arquivo de exemplo, sem anexo para visualizar.', 'error');
+                    }
+                }
+            });
+
+            [searchInput, startDateInput, endDateInput, segmentFilter].forEach(el => el.addEventListener('input', filterAndRender));
+            
+            // --- FUNÇÕES AUXILIARES ---
+            function getSegmentClass(segment) {
+                const colors = {'Jurídico': 'bg-red-100 text-red-800', 'RH': 'bg-yellow-100 text-yellow-800', 'Financeiro': 'bg-blue-100 text-blue-800', 'Hortifruti': 'bg-green-100 text-green-800', 'Restaurante': 'bg-purple-100 text-purple-800', 'Pastelaria': 'bg-pink-100 text-pink-800'};
+                return colors[segment] || 'bg-gray-100 text-gray-800';
+            }
+            function showMessage(message, type = 'success') {
+                const messageBox = document.getElementById('message-box');
+                messageBox.textContent = message;
+                messageBox.className = `message-box ${type} show`;
+                setTimeout(() => messageBox.classList.remove('show'), 3000);
+            }
+            
+            // --- RENDERIZAÇÃO INICIAL ---
+            renderFiles();
+            updateStatistics();
+        });
+    </script>
+</body>
+</html>
+
